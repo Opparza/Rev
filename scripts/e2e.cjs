@@ -1,0 +1,41 @@
+// Headless smoke test: node scripts/e2e.cjs  (expects `vite preview` on :4173)
+const { chromium } = require('playwright');
+const out = process.argv[2] || '/tmp/shots';
+require('fs').mkdirSync(out, { recursive: true });
+(async () => {
+  const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
+  const errors = [];
+  page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+  await page.goto('http://localhost:4173/');
+  await page.waitForFunction(() => window.__deadeye && !window.__deadeye.game.busy, null, { timeout: 15000 });
+  const idle = () => page.waitForFunction(() => !window.__deadeye.game.busy, null, { timeout: 90000 });
+  const results = {};
+  const play = async (name, fn) => { await fn(); await page.waitForTimeout(100); await idle(); const r = await page.evaluate(() => { const g = window.__deadeye.game; const lr = g.lastRound; return lr && { win: lr.totalWin, spins: lr.spins.length, balance: g.balance }; }); results[name] = r; };
+  await page.click('#spin'); await idle();
+  await page.screenshot({ path: out + '/01-normal-spin.png' });
+  // speed up for the rest
+  await page.evaluate(() => { window.gsap = undefined; });
+  await page.selectOption('#speed', '4');
+  await play('normal', async () => { await page.click('#spin'); });
+  const clickPreset = async (label) => { await page.getByRole('button', { name: label, exact: false }).first().click(); };
+  await play('bigWin', () => clickPreset('Big win'));
+  await page.screenshot({ path: out + '/02-big-win.png' });
+  await play('duelBoth', () => clickPreset('both die'));
+  await page.screenshot({ path: out + '/03-duel-both.png' });
+  await play('shots', () => clickPreset('posters on reels'));
+  await page.screenshot({ path: out + '/04-posters.png' });
+  await play('free3', () => clickPreset('3 scatters'));
+  await page.screenshot({ path: out + '/05-after-freespins.png' });
+  await play('buyDuel', () => clickPreset('Duel (25x)'));
+  await play('buySuper', () => clickPreset('Super Bonus'));
+  await page.click('text=Simulate 100k base');
+  await page.waitForTimeout(500);
+  results.sim = await page.textContent('#stats');
+  await page.screenshot({ path: out + '/06-debug.png' });
+  console.log(JSON.stringify(results, null, 1));
+  console.log('ERRORS:', errors.length ? errors : 'none');
+  await browser.close();
+  process.exit(errors.length ? 1 : 0);
+})();
