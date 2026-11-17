@@ -6,7 +6,7 @@ import { mulberry32 } from '../src/engine/rng';
 import { MAX_WIN_X, SYM } from '../src/engine/types';
 
 const rng = (s = 1) => mulberry32(s);
-const blank = () => Array.from({ length: 6 }, () => [SYM.L4, SYM.L3, SYM.L2, SYM.L1]);
+const blank = (): number[][] => Array.from({ length: 6 }, () => [SYM.L4, SYM.L3, SYM.L2, SYM.L1]);
 
 describe('paylines', () => {
   it('has 30 lines, each 6 reels with rows 0-3', () => {
